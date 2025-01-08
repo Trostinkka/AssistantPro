@@ -23,9 +23,6 @@ expenses = defaultdict(list) #сумма -> категория -> дата
 #Инициализация расходов
 expenses = {}
 
-#Инициализация задач
-tasks = {}
-
 #файл для сохранения расходов
 EXPENSES_FILE = 'expenses.json'
  
@@ -34,7 +31,6 @@ def main_menu():
     markup = InlineKeyboardMarkup()
     markup.row(
         InlineKeyboardButton("Погода", callback_data="weather"),
-        #InlineKeyboardButton("Задачи (в разработке)", callback_data="tasks"), 
     )
     markup.row(
         InlineKeyboardButton("Напоминания", callback_data="reminder"),
@@ -67,7 +63,6 @@ def back_to_main_menu():
 #Приведствие
 @bot.message_handler(commands=['start'])
 def start(message):
-    load_tasks_from_file()
     load_expenses_from_file()
     bot.send_message(
 
@@ -82,8 +77,6 @@ def handle_callback(call):
     if call.data == "weather":
         bot.send_message(call.message.chat.id, "Напиши название города, чтобы узнать погоду.", reply_markup=back_to_main_menu())
         bot.register_next_step_handler(call.message, get_weather)
-    elif call.data == "tasks":
-        manage_tasks(call.message)
     elif call.data == "reminder":
         bot.send_message(
             call.message.chat.id, 
@@ -119,92 +112,6 @@ def get_weather(message):
         bot.send_message(message.chat.id, weather_info, reply_markup=main_menu())
     else:
         bot.send_message(message.chat.id, "Город не найден. Попробуй ещё раз.", reply_markup=main_menu())
-
-# === Задачи ===
-# Функция загрузки расходов из файла
-def load_expenses_from_file():
-    global expenses
-    try:
-        with open("expenses.json", "r", encoding="utf-8") as f:
-            expenses = json.load(f)
-    except FileNotFoundError:
-        expenses = {}
-# Функция сохранения расходов в файл
-def save_expenses_to_file():
-    with open("expenses.json", "w", encoding="utf-8") as f:
-        json.dump(expenses, f, ensure_ascii=False, indent=4)
-
-# Функция загрузки задач из файла
-def load_tasks_from_file():
-    global tasks
-    try:
-        with open("tasks.json", "r", encoding="utf-8") as f:
-            tasks_data = json.load(f)
-            tasks = {int(user_id): user_tasks for user_id, user_tasks in tasks_data.items()}
-    except FileNotFoundError:
-        tasks = {}
-# Функция сохранения задач в файл
-def save_tasks_to_file():
-    tasks_serializable = {}
-    for user_id, user_tasks in tasks.items():
-        serializable_tasks = [(task, date.strftime('%d.%m.%Y'), done) for task, date, done in user_tasks]
-        tasks_serializable[user_id] = serializable_tasks
-
-    with open("tasks.json", "w", encoding="utf-8") as f:
-        json.dump(tasks_serializable, f, ensure_ascii=False, indent=4)
-
-def manage_tasks(message):
-    user_tasks = tasks.get(message.chat.id, [])
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(telebot.types.KeyboardButton("Добавить задачу"), telebot.types.KeyboardButton("Главное меню"))
-
-    if user_tasks:
-        task_list = "\n".join([f"{i+1}. {task} ({date}) {'✅' if done else '❌'}" for i, (task, date, done) in enumerate(user_tasks)])
-        bot.send_message(message.chat.id, f"Твои задачи:\n{task_list}", reply_markup=markup)
-    else:
-        bot.send_message(message.chat.id, "У тебя пока нет задач.", reply_markup=markup)
-
-#Добавление задач
-@bot.message_handler(func=lambda message: message.text.lower() == "добавить задачу")
-def add_task(message):
-    bot.send_message(message.chat.id, "Напиши задачи, которые хочешь добавить, разделяя их пробелом или запятой (например, 'Уборка Стирка').")
-
-@bot.message_handler(func=lambda message: True)
-def handle_task_input(message):
-    if message.chat.id not in tasks:
-        tasks[message.chat.id] = []
-
-    task_names = [task.strip() for task in message.text.split(',')]
-    task_names = [task.strip() for task in task_names]  # Обрезаем лишние пробелы
-
-    # Добавляем каждую задачу с текущей датой
-    current_date = datetime.now().strftime('%d.%m.%Y')
-    for task_name in task_names:
-        if task_name:
-            tasks[message.chat.id].append((task_name, current_date, False))  # Добавляем задачу с флагом невыполнено
-
-# Сохраняем задачи в файл
-    save_tasks_to_file()
-    bot.send_message(message.chat.id, f"Задачи '{', '.join(task_names)}' добавлены на {current_date}.")
-
-# Отметить задачу как выполненную
-@bot.message_handler(func=lambda message: message.text.startswith("отметить выполненной"))
-def mark_task_done(message):
-    try:
-        task_number = int(message.text.split()[-1]) - 1  # Индекс задачи
-        if message.chat.id not in tasks or task_number >= len(tasks[message.chat.id]):
-            bot.send_message(message.chat.id, "Неверный номер задачи.")
-            return
-        # Меняем статус задачи на выполненную
-        task_name, task_date, done = tasks[message.chat.id][task_number]
-        tasks[message.chat.id][task_number] = (task_name, task_date, True)
-        # Сохраняем задачи в файл
-        save_tasks_to_file()
-
-        bot.send_message(message.chat.id, f"Задача '{task_name}' выполнена.")
-        manage_tasks(message)  # Показываем актуализированный список задач
-    except ValueError:
-        bot.send_message(message.chat.id, "Неверный формат. Попробуй снова, используя команду: 'Отметить выполненной 1'.")
 
 
 # === Напоминания ===
